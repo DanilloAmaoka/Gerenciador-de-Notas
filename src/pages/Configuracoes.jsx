@@ -273,6 +273,20 @@ export default function Configuracoes() {
                 onChange={(event) => alterarLimiar("critico", event.target.value)}
               />
             </label>
+
+            <label data-tour="config-reavaliacao">
+              <div>
+                <strong>Reavaliação por etapa</strong>
+                <span>Abaixo desta nota, em uma etapa de 50 pontos, aparece reavaliação</span>
+              </div>
+              <input
+                type="number"
+                value={limiares.reavaliacao}
+                min="0"
+                max="50"
+                onChange={(event) => alterarLimiar("reavaliacao", event.target.value)}
+              />
+            </label>
           </div>
         </div>
 

@@ -76,6 +76,7 @@ function montarNotaParaBanco(registro) {
     etapa2Final: Number(registro.etapa2Final) || 0,
     total: Number(registro.total) || 0,
     media: Number(registro.media ?? registro.total) || 0,
+    limiarReavaliacao: Number(registro.limiarReavaliacao) || 0,
     precisaReavaliacao: Boolean(registro.precisaReavaliacao),
   };
 }

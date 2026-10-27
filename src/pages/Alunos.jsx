@@ -1,19 +1,45 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { ANOS, TURMAS } from "../data/notasData";
 import { useFeedback } from "../context/FeedbackContext";
 import { useSchoolData } from "../context/SchoolDataContext";
 
+const FILTROS_ALUNOS_KEY = "gerenciador-notas:filtros-alunos";
+
+function lerFiltrosAlunos() {
+  const padrao = { busca: "", ano: "Todos", turma: "Todas" };
+
+  try {
+    const salvo = JSON.parse(window.localStorage.getItem(FILTROS_ALUNOS_KEY) || "null");
+    return { ...padrao, ...(salvo || {}) };
+  } catch (error) {
+    return padrao;
+  }
+}
+
+function salvarFiltrosAlunos(filtros) {
+  try {
+    window.localStorage.setItem(FILTROS_ALUNOS_KEY, JSON.stringify(filtros));
+  } catch (error) {
+    // Se o navegador bloquear localStorage, a consulta continua funcionando sem memorizar filtros.
+  }
+}
+
 export default function Alunos() {
   const { alunos, carregandoAlunos, adicionarAluno, deletarAluno, estruturaEscolar } = useSchoolData();
   const { mostrarFeedback, pedirConfirmacao } = useFeedback();
-  const [busca, setBusca] = useState("");
-  const [ano, setAno] = useState("Todos");
-  const [turma, setTurma] = useState("Todas");
+  const filtrosIniciais = useMemo(() => lerFiltrosAlunos(), []);
+  const [busca, setBusca] = useState(filtrosIniciais.busca);
+  const [ano, setAno] = useState(filtrosIniciais.ano);
+  const [turma, setTurma] = useState(filtrosIniciais.turma);
   const [salvando, setSalvando] = useState(false);
   const [novoAluno, setNovoAluno] = useState({ nome: "", ano: "3º ano", turma: "A" });
   const anosEscolares = estruturaEscolar.anosEscolares || ANOS;
   const turmasEscolares = estruturaEscolar.turmas || TURMAS;
+
+  useEffect(() => {
+    salvarFiltrosAlunos({ busca, ano, turma });
+  }, [ano, busca, turma]);
 
   const alunosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -148,7 +174,7 @@ export default function Alunos() {
             </div>
           </div>
 
-          <div className="filter-row">
+          <div className="filter-row" data-tour="alunos-filtros">
             <label>
               <span>Buscar</span>
               <input

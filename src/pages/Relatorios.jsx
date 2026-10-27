@@ -81,6 +81,266 @@ function montarResumo(registros, limiares) {
   };
 }
 
+function textoSeguro(valor, fallback = "-") {
+  const texto = String(valor ?? "").replace(/\s+/g, " ").trim();
+  return texto || fallback;
+}
+
+function valorNumerico(valor) {
+  return Number.isFinite(Number(valor)) ? String(arredondarMedia(Number(valor))) : "0";
+}
+
+function escaparTextoPdf(valor) {
+  return textoSeguro(valor)
+    .replace(/[^\x20-\xFF]/g, "?")
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
+}
+
+function comandoTextoPdf(texto, x, y, tamanho = 10, fonte = "F1") {
+  return "0 g 0 G BT /" + fonte + " " + tamanho + " Tf " + x + " " + y + " Td (" + escaparTextoPdf(texto) + ") Tj ET\n";
+}
+
+function comandoLinhaPdf(x1, y1, x2, y2) {
+  return "0 G 0.75 w " + x1 + " " + y1 + " m " + x2 + " " + y2 + " l S\n";
+}
+
+function comandoRetanguloPdf(x, y, largura, altura, preenchimento = null) {
+  if (preenchimento === null) {
+    return "0 G 0.75 w " + x + " " + y + " " + largura + " " + altura + " re S\n";
+  }
+
+  return preenchimento + " g " + x + " " + y + " " + largura + " " + altura + " re f 0 G 0.75 w " + x + " " + y + " " + largura + " " + altura + " re S\n";
+}
+
+function quebrarTextoPdf(texto, largura, tamanho = 10) {
+  const maximo = Math.max(10, Math.floor(largura / (tamanho * 0.52)));
+  const palavras = textoSeguro(texto).split(" ");
+  const linhas = [];
+  let linhaAtual = "";
+
+  palavras.forEach((palavra) => {
+    const tentativa = linhaAtual ? linhaAtual + " " + palavra : palavra;
+
+    if (tentativa.length <= maximo) {
+      linhaAtual = tentativa;
+      return;
+    }
+
+    if (linhaAtual) linhas.push(linhaAtual);
+    linhaAtual = palavra;
+  });
+
+  if (linhaAtual) linhas.push(linhaAtual);
+  return linhas.length ? linhas : ["-"];
+}
+
+function criarDocumentoPdf(paginas) {
+  const largura = 595.28;
+  const altura = 841.89;
+  const objetos = [];
+
+  objetos[1] = "<< /Type /Catalog /Pages 2 0 R >>";
+  objetos[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
+  objetos[4] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>";
+
+  const filhos = [];
+
+  paginas.forEach((conteudo, indice) => {
+    const paginaId = 5 + indice * 2;
+    const conteudoId = paginaId + 1;
+
+    filhos.push(paginaId + " 0 R");
+    objetos[paginaId] =
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " +
+      largura +
+      " " +
+      altura +
+      "] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents " +
+      conteudoId +
+      " 0 R >>";
+    objetos[conteudoId] = "<< /Length " + conteudo.length + " >>\nstream\n" + conteudo + "endstream";
+  });
+
+  objetos[2] = "<< /Type /Pages /Kids [" + filhos.join(" ") + "] /Count " + paginas.length + " >>";
+
+  let pdf = "%PDF-1.4\n%\xFF\xFF\xFF\xFF\n";
+  const deslocamentos = [0];
+
+  for (let indice = 1; indice < objetos.length; indice += 1) {
+    deslocamentos[indice] = pdf.length;
+    pdf += indice + " 0 obj\n" + objetos[indice] + "\nendobj\n";
+  }
+
+  const inicioXref = pdf.length;
+  pdf += "xref\n0 " + objetos.length + "\n0000000000 65535 f \n";
+
+  for (let indice = 1; indice < objetos.length; indice += 1) {
+    pdf += String(deslocamentos[indice]).padStart(10, "0") + " 00000 n \n";
+  }
+
+  pdf += "trailer\n<< /Size " + objetos.length + " /Root 1 0 R >>\nstartxref\n" + inicioXref + "\n%%EOF";
+
+  return Uint8Array.from(pdf, (caractere) => caractere.charCodeAt(0) & 0xff);
+}
+
+function montarPdfRelatorio(relatorio) {
+  const pagina = { largura: 595.28, altura: 841.89, margem: 42, rodape: 42 };
+  const larguraUtil = pagina.largura - pagina.margem * 2;
+  const colunas = [
+    { titulo: "Aluno", largura: 221, alinhamento: "left" },
+    { titulo: "Série", largura: 66, alinhamento: "center" },
+    { titulo: "Turma", largura: 58, alinhamento: "center" },
+    { titulo: "Somatória", largura: 66, alinhamento: "center" },
+    { titulo: "Situação", largura: 100, alinhamento: "center" },
+  ];
+  const paginas = [];
+  let conteudo = "";
+  let y = pagina.altura - pagina.margem;
+
+  function novaPagina(continuacao = false) {
+    if (conteudo) paginas.push(conteudo);
+    conteudo = "";
+    y = pagina.altura - pagina.margem;
+
+    if (continuacao) {
+      conteudo += comandoTextoPdf(textoSeguro(relatorio.escolaNome, "Sistema Escolar"), pagina.margem, y, 11, "F2");
+      conteudo += comandoTextoPdf("Listagem de alunos - continuação", pagina.margem, y - 16, 10, "F1");
+      y -= 36;
+      desenharCabecalhoTabela();
+    }
+  }
+
+  function garantirEspaco(altura) {
+    if (y - altura < pagina.rodape) novaPagina(true);
+  }
+
+  function desenharDetalhe(label, valor, x, yDetalhe, largura) {
+    conteudo += comandoRetanguloPdf(x, yDetalhe - 30, largura, 30, "0.97");
+    conteudo += comandoTextoPdf(label, x + 8, yDetalhe - 11, 7, "F2");
+    conteudo += comandoTextoPdf(valor, x + 8, yDetalhe - 23, 9, "F1");
+  }
+
+  function desenharCabecalhoTabela() {
+    let x = pagina.margem;
+
+    conteudo += comandoRetanguloPdf(pagina.margem, y - 24, larguraUtil, 24, "0.92");
+    colunas.forEach((coluna) => {
+      conteudo += comandoTextoPdf(coluna.titulo, x + 6, y - 16, 8, "F2");
+      x += coluna.largura;
+    });
+    y -= 24;
+  }
+
+  function desenharCelula(texto, x, yLinha, largura, alinhamento, fonte = "F1") {
+    const linhas = quebrarTextoPdf(texto, largura - 12, 9).slice(0, 3);
+    linhas.forEach((linha, indice) => {
+      const deslocamento = alinhamento === "center" ? Math.max(6, largura / 2 - linha.length * 2.2) : 6;
+      conteudo += comandoTextoPdf(linha, x + deslocamento, yLinha - 15 - indice * 10, 9, fonte);
+    });
+  }
+
+  conteudo += comandoTextoPdf(textoSeguro(relatorio.escolaNome, "Sistema Escolar"), pagina.margem, y, 18, "F2");
+  conteudo += comandoTextoPdf("Relatório escolar", pagina.margem, y - 18, 9, "F1");
+  conteudo += comandoLinhaPdf(pagina.margem, y - 28, pagina.largura - pagina.margem, y - 28);
+  y -= 54;
+
+  conteudo += comandoTextoPdf(relatorio.tipo, pagina.margem, y, 15, "F2");
+  y -= 18;
+
+  const detalhes = [
+    ["Disciplina", relatorio.disciplinaNome],
+    ["Bimestre", relatorio.bimestreNome],
+    ["Série", relatorio.ano],
+    ["Turma", relatorio.turma],
+    ["Busca", relatorio.busca || "Todos"],
+    ["Ano letivo", relatorio.anoLetivo],
+    ["Gerado em", relatorio.dataLocal || formatarData(relatorio.criadoEm)],
+    ["Alunos", relatorio.resumo?.totalAlunos || relatorio.registros?.length || 0],
+  ];
+  const larguraDetalhe = (larguraUtil - 10) / 2;
+
+  for (let indice = 0; indice < detalhes.length; indice += 2) {
+    garantirEspaco(40);
+    desenharDetalhe(detalhes[indice][0], textoSeguro(detalhes[indice][1], "Todos"), pagina.margem, y, larguraDetalhe);
+    if (detalhes[indice + 1]) {
+      desenharDetalhe(detalhes[indice + 1][0], textoSeguro(detalhes[indice + 1][1], "Todos"), pagina.margem + larguraDetalhe + 10, y, larguraDetalhe);
+    }
+    y -= 38;
+  }
+
+  y -= 6;
+  garantirEspaco(56);
+
+  const resumo = [
+    ["Média", valorNumerico(relatorio.resumo?.media)],
+    ["Destaques", relatorio.resumo?.destaque || 0],
+    ["Reforço", relatorio.resumo?.reforco || 0],
+    ["Críticos", relatorio.resumo?.critico || 0],
+  ];
+  const larguraResumo = (larguraUtil - 24) / 4;
+
+  resumo.forEach(([label, valor], indice) => {
+    const x = pagina.margem + indice * (larguraResumo + 8);
+    conteudo += comandoRetanguloPdf(x, y - 42, larguraResumo, 42, "0.96");
+    conteudo += comandoTextoPdf(label, x + 8, y - 14, 8, "F2");
+    conteudo += comandoTextoPdf(valor, x + 8, y - 30, 14, "F2");
+  });
+  y -= 64;
+
+  garantirEspaco(56);
+  conteudo += comandoTextoPdf("Listagem de alunos", pagina.margem, y, 12, "F2");
+  y -= 16;
+  desenharCabecalhoTabela();
+
+  const registros = relatorio.registros || [];
+
+  if (registros.length === 0) {
+    garantirEspaco(34);
+    conteudo += comandoRetanguloPdf(pagina.margem, y - 30, larguraUtil, 30);
+    conteudo += comandoTextoPdf("Nenhum aluno encontrado para este relatório.", pagina.margem + 8, y - 19, 10, "F1");
+    y -= 30;
+  }
+
+  registros.forEach((registro, indice) => {
+    const linhasNome = quebrarTextoPdf(registro.aluno, colunas[0].largura - 12, 9);
+    const alturaLinha = Math.max(30, 16 + linhasNome.length * 10);
+
+    garantirEspaco(alturaLinha + 8);
+    conteudo += comandoRetanguloPdf(pagina.margem, y - alturaLinha, larguraUtil, alturaLinha, indice % 2 === 0 ? "0.99" : null);
+
+    let x = pagina.margem;
+    desenharCelula(registro.aluno, x, y, colunas[0].largura, "left", "F2");
+    x += colunas[0].largura;
+    desenharCelula(registro.ano, x, y, colunas[1].largura, "center");
+    x += colunas[1].largura;
+    desenharCelula(registro.turma, x, y, colunas[2].largura, "center");
+    x += colunas[2].largura;
+    desenharCelula(valorNumerico(registro.total), x, y, colunas[3].largura, "center", "F2");
+    x += colunas[3].largura;
+    desenharCelula(registro.situacao, x, y, colunas[4].largura, "center");
+
+    y -= alturaLinha;
+  });
+
+  if (conteudo) paginas.push(conteudo);
+  return criarDocumentoPdf(paginas);
+}
+
+function baixarArquivoPdf(relatorio) {
+  const bytes = montarPdfRelatorio(relatorio);
+  const blob = new Blob([bytes], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = "relatorio-" + criarSlug(relatorio.tipo) + "-" + criarSlug(relatorio.anoLetivo) + ".pdf";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 500);
+}
 export default function Relatorios() {
   const { alunos, anoLetivoAtual, estruturaEscolar, limiaresNotas } = useSchoolData();
   const { mostrarFeedback, pedirConfirmacao } = useFeedback();
@@ -101,6 +361,7 @@ export default function Relatorios() {
   const disciplinasEscolares = estruturaEscolar.disciplinas || DISCIPLINAS;
   const bimestresEscolares = estruturaEscolar.bimestres || BIMESTRES;
   const anoLetivo = anoLetivoAtual;
+  const nomeEscola = estruturaEscolar.nomeEscola || estruturaEscolar.escola || estruturaEscolar.instituicao || "Sistema Escolar";
   const dataGeracao = new Date().toLocaleString("pt-BR");
 
   function nomeDisciplina(id) {
@@ -115,6 +376,7 @@ export default function Relatorios() {
     const filtros = { alunos, disciplinaId, bimestreId, ano, turma, busca, limiares: limiaresNotas };
     const relatorioId = criarIdRelatorio({
       anoLetivo,
+      escolaNome: nomeEscola,
       tipo,
       disciplinaId,
       bimestreId: tipo === "Relatório anual" ? "anual" : bimestreId,
@@ -126,7 +388,7 @@ export default function Relatorios() {
     if (tipo === "Relatório anual") {
       const alunosFiltrados = filtrarAlunos({ alunos, ano, turma, busca });
       const registrosAnuais = alunosFiltrados.map((aluno) => {
-        const notasBimestrais = bimestresEscolares.map((bimestre) => obterNota(aluno, disciplinaId, bimestre.id));
+        const notasBimestrais = bimestresEscolares.map((bimestre) => obterNota(aluno, disciplinaId, bimestre.id, limiaresNotas));
         const totais = notasBimestrais.map((nota) => nota.total);
         const medias = notasBimestrais.map((nota) => nota.media);
         const divisor = bimestresEscolares.length || 1;
@@ -155,6 +417,7 @@ export default function Relatorios() {
         turma,
         busca,
         anoLetivo,
+        escolaNome: nomeEscola,
         disciplinaId,
         disciplinaNome: nomeDisciplina(disciplinaId),
         bimestreId: "anual",
@@ -192,6 +455,7 @@ export default function Relatorios() {
       turma,
       busca,
       anoLetivo,
+      escolaNome: nomeEscola,
       disciplinaId,
       disciplinaNome: nomeDisciplina(disciplinaId),
       bimestreId,
@@ -200,9 +464,16 @@ export default function Relatorios() {
       resumo: montarResumo(registrosFormatados, limiaresNotas),
       registros: registrosFormatados,
     };
-  }, [alunos, ano, anoLetivo, bimestreId, busca, dataGeracao, disciplinaId, tipo, turma, bimestresEscolares, limiaresNotas]);
+  }, [alunos, ano, anoLetivo, bimestreId, busca, dataGeracao, disciplinaId, tipo, turma, bimestresEscolares, limiaresNotas, nomeEscola]);
 
   const relatorioEmTela = relatorioSelecionado || relatorioAtual;
+
+  useEffect(() => {
+    const conteudo = document.querySelector(".conteudo");
+
+    conteudo?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, []);
 
   useEffect(() => {
     carregarRelatoriosSalvos();
@@ -291,10 +562,28 @@ export default function Relatorios() {
     }
   }
 
+  function prepararRelatorioParaExportacao(relatorio) {
+    return {
+      ...relatorio,
+      escolaNome: relatorio.escolaNome || nomeEscola,
+    };
+  }
+
   function gerarPdf(relatorio = relatorioEmTela) {
-    setRelatorioSelecionado(relatorio);
+    const relatorioFinal = prepararRelatorioParaExportacao(relatorio);
+
+    setRelatorioSelecionado(relatorioFinal);
     setAbaAtiva("novo");
     window.setTimeout(() => window.print(), 160);
+  }
+
+  function baixarPdf(relatorio = relatorioEmTela) {
+    try {
+      baixarArquivoPdf(prepararRelatorioParaExportacao(relatorio));
+      mostrarFeedback("PDF baixado para o computador.");
+    } catch (error) {
+      mostrarFeedback("Não foi possível baixar o PDF.", "erro");
+    }
   }
 
   function voltarParaNovoRelatorio() {
@@ -366,7 +655,10 @@ export default function Relatorios() {
                     Consultar
                   </button>
                   <button type="button" className="button primary small" onClick={() => gerarPdf(relatorio)}>
-                    PDF
+                    Gerar PDF
+                  </button>
+                  <button type="button" className="button secondary small" onClick={() => baixarPdf(relatorio)}>
+                    Baixar PDF
                   </button>
                   <button type="button" className="button danger small" data-tour="relatorio-deletar-salvo" onClick={() => excluirRelatorio(relatorio)}>
                     Deletar
@@ -472,6 +764,10 @@ export default function Relatorios() {
               <button type="button" className="button secondary" onClick={() => gerarPdf(relatorioAtual)}>
                 Gerar PDF
               </button>
+
+              <button type="button" className="button secondary" data-tour="relatorio-baixar-pdf" onClick={() => baixarPdf(relatorioAtual)}>
+                Baixar PDF
+              </button>
             </div>
           </div>
 
@@ -485,18 +781,24 @@ export default function Relatorios() {
               </div>
             )}
 
+            <div className="print-school-header">
+              <strong>{relatorioEmTela.escolaNome || nomeEscola}</strong>
+              <span>Relatório escolar</span>
+            </div>
+
             <div className="print-header">
-              <span className="eyebrow">Prévia do relatório</span>
+              <span className="eyebrow">Relatório</span>
               <h2>{relatorioEmTela.tipo}</h2>
 
               <div className="print-meta-grid">
-                <span>Turma: {relatorioEmTela.turma}</span>
-                <span>Ano escolar: {relatorioEmTela.ano}</span>
-                <span>Busca: {relatorioEmTela.busca || "Todos"}</span>
-                <span>Disciplina: {relatorioEmTela.disciplinaNome}</span>
-                <span>Bimestre: {relatorioEmTela.bimestreNome}</span>
-                <span>Ano letivo: {relatorioEmTela.anoLetivo}</span>
-                <span>Gerado em: {relatorioEmTela.dataLocal || formatarData(relatorioEmTela.criadoEm)}</span>
+                <span><strong>Disciplina</strong>{relatorioEmTela.disciplinaNome}</span>
+                <span><strong>Bimestre</strong>{relatorioEmTela.bimestreNome}</span>
+                <span><strong>Série</strong>{relatorioEmTela.ano}</span>
+                <span><strong>Turma</strong>{relatorioEmTela.turma}</span>
+                <span><strong>Busca</strong>{relatorioEmTela.busca || "Todos"}</span>
+                <span><strong>Ano letivo</strong>{relatorioEmTela.anoLetivo}</span>
+                <span><strong>Gerado em</strong>{relatorioEmTela.dataLocal || formatarData(relatorioEmTela.criadoEm)}</span>
+                <span><strong>Alunos</strong>{relatorioEmTela.resumo?.totalAlunos || relatorioEmTela.registros.length}</span>
               </div>
             </div>
 
@@ -524,9 +826,9 @@ export default function Relatorios() {
                 <thead>
                   <tr>
                     <th>Aluno</th>
-                    <th>Ano</th>
+                    <th>Série</th>
                     <th>Turma</th>
-                    <th>Total</th>
+                    <th>Somatória</th>
                     <th>Situação</th>
                   </tr>
                 </thead>
@@ -534,12 +836,12 @@ export default function Relatorios() {
                 <tbody>
                   {relatorioEmTela.registros.map((registro) => (
                     <tr key={registro.alunoId}>
-                      <td>{registro.aluno}</td>
+                      <td><strong>{registro.aluno}</strong></td>
                       <td>{registro.ano}</td>
                       <td>{registro.turma}</td>
-                      <td>{registro.total}</td>
+                      <td>{valorNumerico(registro.total)}</td>
                       <td>
-                        <span className={"status-badge " + (registro.statusClasse || "status-meta")}>
+                        <span className="report-status">
                           {registro.situacao}
                         </span>
                       </td>
@@ -554,3 +856,10 @@ export default function Relatorios() {
     </div>
   );
 }
+
+
+
+
+
+
+

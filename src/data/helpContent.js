@@ -1,5 +1,25 @@
 export const perguntasAjuda = [
   {
+    categoria: "Novidades",
+    pergunta: "O que mudou na versão 1.21?",
+    resposta: "A versão 1.21 refaz a página Evolução com comparação entre bimestres ou etapas, cards que filtram melhoras, quedas e estabilidade, gráfico geral e pódio em janela flutuante. A versão também mantém o novo PDF de Relatórios com botão Baixar PDF.",
+  },
+  {
+    categoria: "Notas",
+    pergunta: "Os filtros de Notas ficam salvos ao trocar de página?",
+    resposta: "Sim. O sistema lembra busca, ano, turma, disciplina, bimestre e filtro de reavaliação no mesmo navegador, para você voltar ao lançamento sem refazer tudo.",
+  },
+  {
+    categoria: "Alunos",
+    pergunta: "Os filtros de Alunos ficam salvos ao trocar de página?",
+    resposta: "Sim. Busca, ano e turma ficam guardados no navegador e reaparecem quando você volta para a página Alunos.",
+  },
+  {
+    categoria: "Notas",
+    pergunta: "Como lanço notas usando o teclado?",
+    resposta: "Clique em uma nota ou no nome do aluno. Enter e seta para a direita avançam para o próximo campo; seta para baixo tenta ir para o mesmo campo do próximo aluno; seta para cima volta para o aluno anterior.",
+  },
+  {
     categoria: "Início",
     pergunta: "Por que todos aparecem críticos no começo do ano?",
     resposta: "Ao iniciar um novo ano letivo, as notas começam zeradas. Enquanto as primeiras notas não forem lançadas, o sistema pode classificar todos como críticos.",
@@ -7,7 +27,7 @@ export const perguntasAjuda = [
   {
     categoria: "Notas",
     pergunta: "O que acontece se eu sair de Notas sem salvar?",
-    resposta: "Se você alterar notas e tentar sair por um link do site, o sistema pede confirmação. Se fechar ou atualizar o navegador, o navegador também mostra um aviso de alterações não salvas.",
+    resposta: "A página Notas salva automaticamente depois de uma pequena pausa na digitação. Se você tentar sair enquanto ainda houver salvamento pendente, o sistema tenta salvar antes de navegar e o navegador pode avisar se fechar a aba rápido demais.",
   },
   {
     categoria: "Relatórios",
@@ -52,12 +72,22 @@ export const perguntasAjuda = [
   {
     categoria: "Evolução",
     pergunta: "Como funciona a Evolução?",
-    resposta: "A Evolução compara notas entre bimestres e também mostra a diferença entre a 1ª e a 2ª etapa. Verde indica melhora, vermelho indica queda.",
+    resposta: "A Evolução compara o desempenho entre dois bimestres ou entre duas etapas de um bimestre. Os cards filtram alunos que melhoraram, caíram ou ficaram estáveis, e o gráfico mostra o total do filtro.",
   },
   {
     categoria: "Evolução",
     pergunta: "Como funciona o pódio de Evolução?",
-    resposta: "Ele mostra os alunos que mais melhoraram entre os bimestres escolhidos. O aluno não precisa estar com nota alta; o que conta é a maior diferença positiva.",
+    resposta: "O pódio agora abre em uma janela flutuante pelo botão Ver pódio. Ele mostra os alunos com maior crescimento positivo dentro dos filtros atuais.",
+  },
+  {
+    categoria: "Evolução",
+    pergunta: "Como comparo uma etapa com outra?",
+    resposta: "Em Evolução, selecione Etapa x etapa, escolha o bimestre e defina a etapa inicial e final. A lista mostra a diferença entre esses dois momentos.",
+  },
+  {
+    categoria: "Evolução",
+    pergunta: "Como filtro só quem melhorou ou caiu?",
+    resposta: "Clique nos cards Melhoraram, Caíram ou Estáveis. A listagem abaixo muda automaticamente para mostrar apenas aquele grupo.",
   },
   {
     categoria: "Destaques",
@@ -67,7 +97,7 @@ export const perguntasAjuda = [
   {
     categoria: "Configurações",
     pergunta: "Como funcionam os limites em Configurações?",
-    resposta: "Os limites definem destaque, meta mínima e situação crítica. Esses valores orientam as cores, listas de risco, relatórios e indicadores do sistema.",
+    resposta: "Os limites definem destaque, meta mínima, situação crítica e reavaliação por etapa. Esses valores orientam as cores, listas, relatórios, indicadores e campos exibidos em Notas.",
   },
   {
     categoria: "Login",
@@ -97,22 +127,27 @@ export const perguntasAjuda = [
   {
     categoria: "Notas",
     pergunta: "Como lançar notas?",
-    resposta: "Entre em Notas, escolha ano, turma, disciplina, bimestre e, se quiser, o filtro de reavaliação. Preencha avaliação e reavaliação de cada etapa e clique em Salvar alterações.",
+    resposta: "Entre em Notas, escolha ano, turma, disciplina, bimestre e, se quiser, o filtro de reavaliação. Esses filtros ficam lembrados no navegador. Preencha as avaliações; quando a nota ficar abaixo do limite configurado, o campo de reavaliação aparece ao lado automaticamente.",
   },
   {
     categoria: "Notas",
     pergunta: "Quanto vale cada etapa?",
-    resposta: "A 1ª etapa vale até 50 pontos e a 2ª etapa vale até 50 pontos. Se houver reavaliação, o sistema usa a maior nota de cada etapa e calcula a média: etapa final 1 + etapa final 2, dividido por 2.",
+    resposta: "A 1ª etapa vale até 50 pontos e a 2ª etapa vale até 50 pontos. Se houver reavaliação, o sistema usa a maior nota de cada etapa. Em Notas, o total mostrado é a soma da etapa final 1 com a etapa final 2.",
   },
   {
     categoria: "Notas",
-    pergunta: "O botão Salvar alterações salva onde?",
-    resposta: "Ele salva avaliação, reavaliação, média e total dentro do documento do aluno no Firestore, separado por disciplina e bimestre.",
+    pergunta: "Como as notas são salvas automaticamente?",
+    resposta: "Depois que você altera um campo, o sistema aguarda uma pequena pausa na digitação e salva avaliação, reavaliação, média e total no Firestore, separado por disciplina e bimestre.",
   },
   {
     categoria: "Notas",
     pergunta: "Quando o aluno precisa fazer reavaliação?",
-    resposta: "Quando a avaliação de uma etapa fica abaixo de 30 pontos, o aluno aparece como precisando de reavaliação naquela etapa.",
+    resposta: "Quando a avaliação de uma etapa fica abaixo do limite configurado, o campo de reavaliação aparece ao lado daquela avaliação. Se a nota atingir o limite ou ficar acima dele, a reavaliação some e deixa de contar.",
+  },
+  {
+    categoria: "Configurações",
+    pergunta: "Como altero o limite de reavaliação?",
+    resposta: "Em Configurações, altere Reavaliação por etapa e clique em Salvar configurações. Esse valor vale para cada etapa de 50 pontos e muda quando o campo de reavaliação aparece em Notas.",
   },
   {
     categoria: "Risco",
@@ -132,7 +167,7 @@ export const perguntasAjuda = [
   {
     categoria: "Evolução",
     pergunta: "Como vejo se o aluno melhorou?",
-    resposta: "Na página Evolução, escolha os bimestres para comparar. Verde indica melhora e vermelho indica queda.",
+    resposta: "Na página Evolução, escolha Bimestre x bimestre ou Etapa x etapa, ajuste os filtros e veja a listagem. O símbolo ▲ indica melhora, ▼ indica queda e ◆ indica estabilidade.",
   },
   {
     categoria: "Destaques",
@@ -157,7 +192,7 @@ export const perguntasAjuda = [
   {
     categoria: "Relatórios",
     pergunta: "Como gerar PDF?",
-    resposta: "Abra o relatório desejado e clique em PDF. O navegador abre a impressão para salvar como PDF.",
+    resposta: "Em Relatórios, clique em Gerar PDF para abrir a impressão do navegador ou em Baixar PDF para salvar um arquivo direto no computador.",
   },
   {
     categoria: "Relatórios",
@@ -177,6 +212,48 @@ export const perguntasAjuda = [
 ];
 
 export const tutoriaisPraticos = [
+  {
+    id: "novidades-121",
+    titulo: "Novidades da versão 1.21",
+    descricao: "Apresenta a nova Evolução, os filtros clicáveis e o PDF baixável dos relatórios.",
+    passos: [
+      {
+        seletor: '[data-tour="nav-novidades"]',
+        titulo: "Novidades atualizadas",
+        texto: "Este botão agora apresenta as mudanças mais recentes da versão 1.21.",
+      },
+      {
+        rota: "/evolucao",
+        seletor: '[data-tour="evolucao-filtros"]',
+        titulo: "Evolução refeita",
+        texto: "A página Evolução ganhou filtros mais claros e permite comparar bimestre com bimestre ou etapa com etapa.",
+      },
+      {
+        rota: "/evolucao",
+        seletor: '[data-tour="evolucao-metricas"]',
+        titulo: "Cards que filtram",
+        texto: "Clique nos cards para ver todos os alunos, apenas quem melhorou, quem caiu ou quem ficou estável.",
+      },
+      {
+        rota: "/evolucao",
+        seletor: '[data-tour="evolucao-grafico"]',
+        titulo: "Gráfico geral",
+        texto: "O gráfico resume a distribuição do filtro atual e mostra a média inicial e final do grupo.",
+      },
+      {
+        rota: "/evolucao",
+        seletor: '[data-tour="evolucao-podio"]',
+        titulo: "Pódio em janela",
+        texto: "O pódio saiu da tela fixa e agora abre em uma janela flutuante com os alunos que mais evoluíram.",
+      },
+      {
+        rota: "/relatorios",
+        seletor: '[data-tour="relatorio-baixar-pdf"]',
+        titulo: "Baixar PDF",
+        texto: "Relatórios agora têm um botão para baixar o PDF direto no computador, além da opção Gerar PDF.",
+      },
+    ],
+  },
   {
     id: "cadastrar-aluno",
     titulo: "Cadastrar um aluno novo",
@@ -216,44 +293,44 @@ export const tutoriaisPraticos = [
   },
   {
     id: "lancar-notas",
-    titulo: "Lançar e salvar notas",
-    descricao: "Ensina a filtrar alunos, preencher notas e salvar alterações.",
+    titulo: "Lançar notas com salvamento automático",
+    descricao: "Ensina a filtrar alunos, preencher notas e acompanhar o salvamento automático.",
     passos: [
       {
         rota: "/notas",
         seletor: '[data-tour="nav-notas"]',
         titulo: "Abra Notas",
-        texto: "A página Notas é onde você informa avaliação e reavaliação das duas etapas e salva o resultado.",
+        texto: "A página Notas é onde você informa as avaliações das duas etapas. A reavaliação só aparece quando a avaliação fica abaixo do limite configurado.",
       },
       {
         rota: "/notas",
         seletor: '[data-tour="notas-filtros"]',
         titulo: "Escolha os filtros",
-        texto: "Use ano, turma, disciplina, bimestre e busca para mostrar apenas os alunos desejados.",
+        texto: "Use ano, turma, disciplina, bimestre e busca para mostrar apenas os alunos desejados. Esses filtros ficam salvos quando você troca de página e volta depois.",
       },
       {
         rota: "/notas",
         seletor: '[data-tour="nota-etapa1"]',
         titulo: "Preencha a 1ª etapa",
-        texto: "Digite a nota da avaliação da primeira etapa. Se for abaixo de 30, o aluno entra no filtro de reavaliação.",
+        texto: "Digite a nota da avaliação da primeira etapa. Se for abaixo do limite configurado, o campo de reavaliação aparece ao lado.",
       },
       {
         rota: "/notas",
         seletor: '[data-tour="nota-etapa2"]',
         titulo: "Preencha a 2ª etapa",
-        texto: "Digite a nota da avaliação da segunda etapa. A média soma a etapa final 1 com a etapa final 2 e divide por 2.",
+        texto: "Digite a nota da avaliação da segunda etapa. O total soma a etapa final 1 com a etapa final 2, usando a maior nota quando houver reavaliação.",
       },
       {
         rota: "/notas",
         seletor: '[data-tour="nota-etapa1-reavaliacao"]',
         titulo: "Preencha reavaliação se precisar",
-        texto: "Quando a avaliação ficar abaixo de 30, use o campo de reavaliação. Se a reavaliação for maior, ela passa a ser a nota final daquela etapa na média.",
+        texto: "Quando a avaliação ficar abaixo do limite configurado, use o campo de reavaliação que aparece ao lado. Se a reavaliação for maior, ela passa a ser a nota final daquela etapa no total.",
       },
       {
         rota: "/notas",
         seletor: '[data-tour="notas-salvar"]',
-        titulo: "Salve as alterações",
-        texto: "Clique em Salvar alterações para gravar as notas no banco de dados.",
+        titulo: "Confira o salvamento automático",
+        texto: "Acompanhe este marcador para saber se o sistema está aguardando, salvando ou se já salvou automaticamente.",
       },
     ],
   },
@@ -321,7 +398,7 @@ export const tutoriaisPraticos = [
         rota: "/relatorios",
         seletor: '[data-tour="relatorios-salvos"]',
         titulo: "Consulte depois",
-        texto: "Os relatórios salvos aparecem aqui. Use Consultar para abrir e PDF para imprimir.",
+        texto: "Os relatórios salvos aparecem aqui. Use Consultar para abrir, Gerar PDF para imprimir ou Baixar PDF para salvar direto no computador.",
       },
     ],
   },
@@ -396,37 +473,37 @@ export const tutoriaisPraticos = [
   {
     id: "entender-evolucao",
     titulo: "Como funciona a Evolução",
-    descricao: "Mostra como comparar bimestres e identificar melhora ou queda de desempenho.",
+    descricao: "Mostra como comparar bimestres ou etapas e identificar melhora, queda ou estabilidade.",
     passos: [
       {
         rota: "/evolucao",
         seletor: '[data-tour="nav-evolucao"]',
         titulo: "Abra Evolução",
-        texto: "A Evolução compara o desempenho do aluno em dois momentos diferentes.",
+        texto: "A Evolução compara o desempenho do aluno em dois momentos diferentes: bimestres ou etapas.",
       },
       {
         rota: "/evolucao",
         seletor: '[data-tour="evolucao-filtros"]',
         titulo: "Escolha os filtros",
-        texto: "Você pode escolher aluno, ano, turma, disciplina e quais bimestres serão comparados.",
+        texto: "Você pode comparar bimestres ou etapas, além de filtrar aluno, ano, turma e disciplina.",
       },
       {
         rota: "/evolucao",
         seletor: '[data-tour="evolucao-metricas"]',
         titulo: "Veja o resumo",
-        texto: "Os cards mostram quantos melhoraram, caíram ou ficaram estáveis no período.",
+        texto: "Os cards mostram quantos melhoraram, caíram ou ficaram estáveis. Clique em um card para filtrar a lista.",
+      },
+      {
+        rota: "/evolucao",
+        seletor: '[data-tour="evolucao-grafico"]',
+        titulo: "Analise o gráfico geral",
+        texto: "O gráfico mostra a distribuição total do filtro entre melhora, queda e estabilidade.",
       },
       {
         rota: "/evolucao",
         seletor: '[data-tour="evolucao-podio"]',
-        titulo: "Veja o pódio de evolução",
-        texto: "Aqui aparecem os alunos que mais subiram entre os bimestres selecionados, mesmo que ainda não estejam entre as maiores notas.",
-      },
-      {
-        rota: "/evolucao",
-        seletor: '[data-tour="evolucao-homenagem"]',
-        titulo: "Homenageie o pódio",
-        texto: "Use este botão para gerar certificados dos alunos com maior evolução no filtro atual.",
+        titulo: "Abra o pódio",
+        texto: "O botão mostra uma janela flutuante com os alunos que mais evoluíram no filtro atual.",
       },
       {
         rota: "/evolucao",
@@ -470,7 +547,7 @@ export const tutoriaisPraticos = [
   {
     id: "entender-configuracoes",
     titulo: "Como funciona as Configurações",
-    descricao: "Mostra onde alterar limites de destaque, meta, crítico e ano letivo ativo.",
+    descricao: "Mostra onde alterar limites de destaque, meta, crítico, reavaliação e ano letivo ativo.",
     passos: [
       {
         rota: "/configuracoes",
@@ -482,7 +559,13 @@ export const tutoriaisPraticos = [
         rota: "/configuracoes",
         seletor: '[data-tour="config-limiares"]',
         titulo: "Ajuste os limites de nota",
-        texto: "Aqui você define o que é destaque, meta mínima e situação crítica.",
+        texto: "Aqui você define o que é destaque, meta mínima, situação crítica e quando uma etapa precisa de reavaliação.",
+      },
+      {
+        rota: "/configuracoes",
+        seletor: '[data-tour="config-reavaliacao"]',
+        titulo: "Defina a reavaliação",
+        texto: "Este campo define abaixo de qual nota, em uma etapa de 50 pontos, o campo de reavaliação aparece em Notas.",
       },
       {
         rota: "/configuracoes",
@@ -499,6 +582,31 @@ export const tutoriaisPraticos = [
     ],
   },
   {
+    id: "alterar-limite-reavaliacao",
+    titulo: "Alterar limite de reavaliação",
+    descricao: "Mostra como mudar a regra que faz o campo de reavaliação aparecer em Notas.",
+    passos: [
+      {
+        rota: "/configuracoes",
+        seletor: '[data-tour="nav-configuracoes"]',
+        titulo: "Abra Configurações",
+        texto: "A regra de reavaliação fica junto das faixas de nota do sistema.",
+      },
+      {
+        rota: "/configuracoes",
+        seletor: '[data-tour="config-reavaliacao"]',
+        titulo: "Informe o novo limite",
+        texto: "Digite a nota mínima desejada para cada etapa. Avaliações abaixo desse valor passam a pedir reavaliação.",
+      },
+      {
+        rota: "/configuracoes",
+        seletor: '[data-tour="config-salvar"]',
+        titulo: "Salve a configuração",
+        texto: "Clique em Salvar configurações para gravar a nova regra no banco de dados.",
+      },
+    ],
+  },
+  {
     id: "consultar-relatorios-salvos",
     titulo: "Consultar relatórios salvos",
     descricao: "Mostra onde ficam as abas de Relatórios e como acessar a lista salva.",
@@ -507,7 +615,7 @@ export const tutoriaisPraticos = [
         rota: "/relatorios",
         seletor: '[data-tour="relatorio-abas"]',
         titulo: "Use as abas",
-        texto: "A aba Relatórios salvos fica no topo da página. Clique nela para consultar, gerar PDF ou deletar relatórios guardados.",
+        texto: "A aba Relatórios salvos fica no topo da página. Clique nela para consultar, gerar PDF, baixar PDF ou deletar relatórios guardados.",
       },
       {
         rota: "/relatorios",

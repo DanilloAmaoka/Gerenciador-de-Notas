@@ -13,13 +13,14 @@ export const BIMESTRES = [
   { id: "b4", nome: "4º bimestre" },
 ];
 
+export const LIMIAR_REAVALIACAO = 30;
+
 export const LIMIARES_PADRAO = {
   destaque: 80,
   meta: 70,
   critico: 60,
+  reavaliacao: LIMIAR_REAVALIACAO,
 };
-
-export const LIMIAR_REAVALIACAO = 30;
 
 // Estes dados servem apenas para popular o Firestore na primeira execução.
 // Depois disso, o site passa a usar os alunos salvos no banco de dados.
@@ -93,7 +94,12 @@ export function normalizarLimiares(limiares = {}) {
     destaque: limitarNumero(numeroSeguro(limiares.destaque, LIMIARES_PADRAO.destaque), 0, 100),
     meta: limitarNumero(numeroSeguro(limiares.meta, LIMIARES_PADRAO.meta), 0, 100),
     critico: limitarNumero(numeroSeguro(limiares.critico, LIMIARES_PADRAO.critico), 0, 100),
+    reavaliacao: limitarNumero(numeroSeguro(limiares.reavaliacao, LIMIARES_PADRAO.reavaliacao), 0, 50),
   };
+}
+
+export function obterLimiarReavaliacao(limiares = LIMIARES_PADRAO) {
+  return normalizarLimiares(limiares).reavaliacao;
 }
 
 export function obterDisciplinaNome(disciplinaId) {
@@ -109,18 +115,19 @@ export function obterBimestreAnterior(bimestreId) {
   return indiceAtual > 0 ? BIMESTRES[indiceAtual - 1] : null;
 }
 
-export function obterNota(alunoSelecionado, disciplinaId, bimestreId) {
+export function obterNota(alunoSelecionado, disciplinaId, bimestreId, limiares = LIMIARES_PADRAO) {
   const nota = alunoSelecionado.notas?.[disciplinaId]?.[bimestreId] || {};
+  const limiarReavaliacao = obterLimiarReavaliacao(limiares);
   const etapa1 = limitarNotaEtapa(nota.etapa1);
-  const etapa1Reavaliacao = limitarNotaEtapa(nota.etapa1Reavaliacao);
   const etapa2 = limitarNotaEtapa(nota.etapa2);
-  const etapa2Reavaliacao = limitarNotaEtapa(nota.etapa2Reavaliacao);
+  const precisaReavaliacaoEtapa1 = etapa1 > 0 && etapa1 < limiarReavaliacao;
+  const precisaReavaliacaoEtapa2 = etapa2 > 0 && etapa2 < limiarReavaliacao;
+  const etapa1Reavaliacao = precisaReavaliacaoEtapa1 ? limitarNotaEtapa(nota.etapa1Reavaliacao) : 0;
+  const etapa2Reavaliacao = precisaReavaliacaoEtapa2 ? limitarNotaEtapa(nota.etapa2Reavaliacao) : 0;
   const etapa1Final = Math.max(etapa1, etapa1Reavaliacao);
   const etapa2Final = Math.max(etapa2, etapa2Reavaliacao);
   const total = etapa1Final + etapa2Final;
   const media = arredondarMedia(total / 2);
-  const precisaReavaliacaoEtapa1 = etapa1 > 0 && etapa1 < LIMIAR_REAVALIACAO;
-  const precisaReavaliacaoEtapa2 = etapa2 > 0 && etapa2 < LIMIAR_REAVALIACAO;
 
   return {
     etapa1,
@@ -132,6 +139,7 @@ export function obterNota(alunoSelecionado, disciplinaId, bimestreId) {
     total,
     media,
     evolucaoEtapas: etapa2Final - etapa1Final,
+    limiarReavaliacao,
     precisaReavaliacaoEtapa1,
     precisaReavaliacaoEtapa2,
     precisaReavaliacao: precisaReavaliacaoEtapa1 || precisaReavaliacaoEtapa2,
@@ -179,7 +187,7 @@ export function montarRegistros({
   limiares = LIMIARES_PADRAO,
 } = {}) {
   const registros = filtrarAlunos({ alunos, ano, turma, busca }).map((alunoSelecionado) => {
-    const nota = obterNota(alunoSelecionado, disciplinaId, bimestreId);
+    const nota = obterNota(alunoSelecionado, disciplinaId, bimestreId, limiares);
 
     return {
       id: String(alunoSelecionado.id) + "-" + disciplinaId + "-" + bimestreId,
@@ -222,9 +230,9 @@ export function calcularResumo(filtros = {}) {
   };
 }
 
-export function compararBimestres(alunoSelecionado, disciplinaId, bimestreInicialId, bimestreFinalId) {
-  const notaInicial = obterNota(alunoSelecionado, disciplinaId, bimestreInicialId);
-  const notaFinal = obterNota(alunoSelecionado, disciplinaId, bimestreFinalId);
+export function compararBimestres(alunoSelecionado, disciplinaId, bimestreInicialId, bimestreFinalId, limiares = LIMIARES_PADRAO) {
+  const notaInicial = obterNota(alunoSelecionado, disciplinaId, bimestreInicialId, limiares);
+  const notaFinal = obterNota(alunoSelecionado, disciplinaId, bimestreFinalId, limiares);
   const delta = arredondarMedia(notaFinal.media - notaInicial.media);
 
   return {
@@ -250,7 +258,7 @@ export function gerarAlertas(filtros = {}) {
     .filter((registro) => registro.total < limiares.meta)
     .map((registro) => {
       const notaAnterior = bimestreAnterior
-        ? obterNota(registro.aluno, filtros.disciplinaId || "portugues", bimestreAnterior.id).total
+        ? obterNota(registro.aluno, filtros.disciplinaId || "portugues", bimestreAnterior.id, limiares).total
         : null;
       const persistente = notaAnterior !== null && notaAnterior < limiares.meta;
 

@@ -1,20 +1,25 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
   ANOS,
   BIMESTRES,
   DISCIPLINAS,
-  LIMIAR_REAVALIACAO,
   TURMAS,
   classificarNota,
   limitarNotaEtapa,
   montarRegistros,
+  obterLimiarReavaliacao,
 } from "../data/notasData";
 import { useFeedback } from "../context/FeedbackContext";
 import { useSchoolData } from "../context/SchoolDataContext";
 
-const camposNota = ["etapa1", "etapa1Reavaliacao", "etapa2", "etapa2Reavaliacao"];
+const campoReavaliacaoPorEtapa = {
+  etapa1: "etapa1Reavaliacao",
+  etapa2: "etapa2Reavaliacao",
+};
+
+const FILTROS_NOTAS_KEY = "gerenciador-notas:filtros-notas";
 
 function normalizarEntradaNota(valor) {
   if (valor === "") return "";
@@ -25,26 +30,134 @@ function formatarNota(valor) {
   return Number(valor || 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 }
 
+function lerFiltrosNotas() {
+  const padrao = {
+    disciplinaId: "portugues",
+    bimestreId: "b2",
+    ano: "Todos",
+    turma: "Todas",
+    busca: "",
+    reavaliacao: "Todos",
+  };
+
+  try {
+    const salvo = JSON.parse(window.localStorage.getItem(FILTROS_NOTAS_KEY) || "null");
+    return { ...padrao, ...(salvo || {}) };
+  } catch (error) {
+    return padrao;
+  }
+}
+
+function salvarFiltrosNotas(filtros) {
+  try {
+    window.localStorage.setItem(FILTROS_NOTAS_KEY, JSON.stringify(filtros));
+  } catch (error) {
+    // Se o navegador bloquear localStorage, a página continua funcionando sem persistir filtros.
+  }
+}
+
+function focarInputNota(input) {
+  if (!input) return;
+  input.focus();
+  input.select();
+}
+
+function focarPrimeiroInputDaLinha(indiceLinha) {
+  const input = document.querySelector(
+    `[data-note-input="true"][data-note-row="${indiceLinha}"]`,
+  );
+
+  focarInputNota(input);
+}
+
+function ativarLinhaPeloTeclado(event, indiceLinha) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+
+  event.preventDefault();
+  focarPrimeiroInputDaLinha(indiceLinha);
+}
+
+function navegarEntreInputsDeNota(event) {
+  const teclasValidas = ["Enter", "ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp"];
+  if (!teclasValidas.includes(event.key)) return;
+
+  const inputAtual = event.currentTarget;
+  const inputs = Array.from(document.querySelectorAll('[data-note-input="true"]'));
+  const indiceAtual = inputs.indexOf(inputAtual);
+  if (indiceAtual < 0) return;
+
+  event.preventDefault();
+
+  if (event.key === "Enter" || event.key === "ArrowRight") {
+    focarInputNota(inputs[indiceAtual + 1]);
+    return;
+  }
+
+  if (event.key === "ArrowLeft") {
+    focarInputNota(inputs[indiceAtual - 1]);
+    return;
+  }
+
+  const linhaAtual = Number(inputAtual.dataset.noteRow);
+  const campoAtual = inputAtual.dataset.noteField;
+  const direcao = event.key === "ArrowDown" ? 1 : -1;
+  const linhas = [...new Set(inputs.map((input) => Number(input.dataset.noteRow)))].sort((a, b) => a - b);
+  const indiceLinha = linhas.indexOf(linhaAtual);
+  const linhaDestino = linhas[indiceLinha + direcao];
+
+  if (linhaDestino === undefined) {
+    focarInputNota(inputs[indiceAtual + direcao]);
+    return;
+  }
+
+  const mesmoCampo = inputs.find(
+    (input) => Number(input.dataset.noteRow) === linhaDestino && input.dataset.noteField === campoAtual,
+  );
+  const primeiroCampoDaLinha = inputs.find((input) => Number(input.dataset.noteRow) === linhaDestino);
+
+  focarInputNota(mesmoCampo || primeiroCampoDaLinha);
+}
+
+function precisaReavaliar(valor, limiarReavaliacao) {
+  const nota = limitarNotaEtapa(valor);
+  return nota > 0 && nota < limiarReavaliacao;
+}
+
 function montarNotaEditavel(registro) {
   return {
     etapa1: String(registro.etapa1 || 0),
-    etapa1Reavaliacao: String(registro.etapa1Reavaliacao || 0),
+    etapa1Reavaliacao: registro.precisaReavaliacaoEtapa1 ? String(registro.etapa1Reavaliacao || 0) : "0",
     etapa2: String(registro.etapa2 || 0),
-    etapa2Reavaliacao: String(registro.etapa2Reavaliacao || 0),
+    etapa2Reavaliacao: registro.precisaReavaliacaoEtapa2 ? String(registro.etapa2Reavaliacao || 0) : "0",
   };
+}
+
+function limparReavaliacaoQuandoNaoPrecisa(notaEditada, limiarReavaliacao) {
+  const proximaNota = { ...notaEditada };
+
+  if (!precisaReavaliar(proximaNota.etapa1, limiarReavaliacao)) {
+    proximaNota.etapa1Reavaliacao = "0";
+  }
+
+  if (!precisaReavaliar(proximaNota.etapa2, limiarReavaliacao)) {
+    proximaNota.etapa2Reavaliacao = "0";
+  }
+
+  return proximaNota;
 }
 
 function calcularRegistroEditado(registro, notaEditada, limiaresNotas) {
   const etapa1 = limitarNotaEtapa(notaEditada.etapa1);
-  const etapa1Reavaliacao = limitarNotaEtapa(notaEditada.etapa1Reavaliacao);
   const etapa2 = limitarNotaEtapa(notaEditada.etapa2);
-  const etapa2Reavaliacao = limitarNotaEtapa(notaEditada.etapa2Reavaliacao);
+  const limiarReavaliacao = obterLimiarReavaliacao(limiaresNotas);
+  const precisaReavaliacaoEtapa1 = etapa1 > 0 && etapa1 < limiarReavaliacao;
+  const precisaReavaliacaoEtapa2 = etapa2 > 0 && etapa2 < limiarReavaliacao;
+  const etapa1Reavaliacao = precisaReavaliacaoEtapa1 ? limitarNotaEtapa(notaEditada.etapa1Reavaliacao) : 0;
+  const etapa2Reavaliacao = precisaReavaliacaoEtapa2 ? limitarNotaEtapa(notaEditada.etapa2Reavaliacao) : 0;
   const etapa1Final = Math.max(etapa1, etapa1Reavaliacao);
   const etapa2Final = Math.max(etapa2, etapa2Reavaliacao);
   const total = etapa1Final + etapa2Final;
   const media = Math.round((total / 2) * 10) / 10;
-  const precisaReavaliacaoEtapa1 = etapa1 > 0 && etapa1 < LIMIAR_REAVALIACAO;
-  const precisaReavaliacaoEtapa2 = etapa2 > 0 && etapa2 < LIMIAR_REAVALIACAO;
 
   return {
     ...registro,
@@ -57,6 +170,7 @@ function calcularRegistroEditado(registro, notaEditada, limiaresNotas) {
     total,
     media,
     evolucaoEtapas: etapa2Final - etapa1Final,
+    limiarReavaliacao,
     precisaReavaliacaoEtapa1,
     precisaReavaliacaoEtapa2,
     precisaReavaliacao: precisaReavaliacaoEtapa1 || precisaReavaliacaoEtapa2,
@@ -66,33 +180,46 @@ function calcularRegistroEditado(registro, notaEditada, limiaresNotas) {
 
 function calcularResumoAtual(registros) {
   const totalAlunos = registros.length;
-  const somaMedias = registros.reduce((soma, registro) => soma + Number(registro.media || 0), 0);
+  const somaTotais = registros.reduce((soma, registro) => soma + Number(registro.total || 0), 0);
 
   return {
     totalAlunos,
-    media: totalAlunos ? Math.round((somaMedias / totalAlunos) * 10) / 10 : 0,
+    totalMedio: totalAlunos ? Math.round((somaTotais / totalAlunos) * 10) / 10 : 0,
     reavaliacao: registros.filter((registro) => registro.precisaReavaliacao).length,
   };
 }
 
 export default function Notas() {
   const navigate = useNavigate();
-  const [disciplinaId, setDisciplinaId] = useState("portugues");
-  const [bimestreId, setBimestreId] = useState("b2");
-  const [ano, setAno] = useState("Todos");
-  const [turma, setTurma] = useState("Todas");
-  const [busca, setBusca] = useState("");
-  const [reavaliacao, setReavaliacao] = useState("Todos");
+  const filtrosIniciais = useMemo(() => lerFiltrosNotas(), []);
+  const [disciplinaId, setDisciplinaId] = useState(filtrosIniciais.disciplinaId);
+  const [bimestreId, setBimestreId] = useState(filtrosIniciais.bimestreId);
+  const [ano, setAno] = useState(filtrosIniciais.ano);
+  const [turma, setTurma] = useState(filtrosIniciais.turma);
+  const [busca, setBusca] = useState(filtrosIniciais.busca);
+  const [reavaliacao, setReavaliacao] = useState(filtrosIniciais.reavaliacao);
   const [notas, setNotas] = useState({});
-  const [salvandoNotas, setSalvandoNotas] = useState(false);
+  const [salvandoAutomatico, setSalvandoAutomatico] = useState(false);
+  const [pendentesCount, setPendentesCount] = useState(0);
+  const [ultimoSalvamento, setUltimoSalvamento] = useState("");
+  const [erroSalvamento, setErroSalvamento] = useState(false);
+  const pendentesRef = useRef(new Map());
+  const timerSalvamentoRef = useRef(null);
+  const salvandoRef = useRef(false);
+  const salvamentoAtualRef = useRef(Promise.resolve(true));
   const { alunos, carregandoAlunos, salvarNotas, estruturaEscolar, limiaresNotas } = useSchoolData();
-  const { mostrarFeedback, pedirConfirmacao } = useFeedback();
+  const { mostrarFeedback } = useFeedback();
   const anosEscolares = estruturaEscolar.anosEscolares || ANOS;
   const turmasEscolares = estruturaEscolar.turmas || TURMAS;
   const disciplinasEscolares = estruturaEscolar.disciplinas || DISCIPLINAS;
   const bimestresEscolares = estruturaEscolar.bimestres || BIMESTRES;
+  const limiarReavaliacao = obterLimiarReavaliacao(limiaresNotas);
 
   const filtrosBase = { alunos, disciplinaId, bimestreId, ano, turma, busca, limiares: limiaresNotas };
+
+  useEffect(() => {
+    salvarFiltrosNotas({ disciplinaId, bimestreId, ano, turma, busca, reavaliacao });
+  }, [ano, bimestreId, busca, disciplinaId, reavaliacao, turma]);
 
   // Monta os registros salvos no banco antes das alterações digitadas na tela.
   const registrosBase = useMemo(
@@ -108,14 +235,14 @@ export default function Notas() {
     [registrosBase],
   );
 
-  useEffect(() => {
-    setNotas(notasBase);
-  }, [notasBase]);
-
-  const registrosCalculados = registrosBase.map((registro) => {
-    const notaEditada = notas[registro.aluno.id] || montarNotaEditavel(registro);
-    return calcularRegistroEditado(registro, notaEditada, limiaresNotas);
-  });
+  const registrosCalculados = useMemo(
+    () =>
+      registrosBase.map((registro) => {
+        const notaEditada = notas[registro.aluno.id] || montarNotaEditavel(registro);
+        return calcularRegistroEditado(registro, notaEditada, limiaresNotas);
+      }),
+    [limiaresNotas, notas, registrosBase],
+  );
 
   const registros = registrosCalculados.filter((registro) => {
     if (reavaliacao === "Apenas reavaliação") return registro.precisaReavaliacao;
@@ -123,24 +250,98 @@ export default function Notas() {
     return true;
   });
 
-  const totalAlteracoesNaoSalvas = useMemo(
-    () =>
-      registrosBase.filter((registro) => {
-        const notaEditada = notas[registro.aluno.id];
-        if (!notaEditada) return false;
-
-        return camposNota.some(
-          (campo) => limitarNotaEtapa(notaEditada[campo]) !== Number(registro[campo] || 0),
-        );
-      }).length,
-    [notas, registrosBase],
-  );
-
-  const temAlteracoesNaoSalvas = totalAlteracoesNaoSalvas > 0;
+  const temAlteracoesPendentes = pendentesCount > 0 || salvandoAutomatico;
   const resumo = calcularResumoAtual(registros);
 
   useEffect(() => {
-    if (!temAlteracoesNaoSalvas) return undefined;
+    if (temAlteracoesPendentes) return;
+    setNotas(notasBase);
+  }, [notasBase, temAlteracoesPendentes]);
+
+  const salvarFilaPendente = useCallback(async () => {
+    if (timerSalvamentoRef.current) {
+      window.clearTimeout(timerSalvamentoRef.current);
+      timerSalvamentoRef.current = null;
+    }
+
+    if (salvandoRef.current) {
+      await salvamentoAtualRef.current;
+      if (pendentesRef.current.size > 0) {
+        return salvarFilaPendente();
+      }
+      return true;
+    }
+
+    const itensPendentes = Array.from(pendentesRef.current.values());
+    if (itensPendentes.length === 0) return true;
+
+    pendentesRef.current.clear();
+    setPendentesCount(0);
+    setSalvandoAutomatico(true);
+    setErroSalvamento(false);
+    salvandoRef.current = true;
+
+    const salvamento = (async () => {
+      try {
+        const grupos = new Map();
+
+        itensPendentes.forEach((item) => {
+          const chave = item.disciplinaId + "|" + item.bimestreId;
+          const grupo = grupos.get(chave) || {
+            disciplinaId: item.disciplinaId,
+            bimestreId: item.bimestreId,
+            registros: [],
+          };
+
+          grupo.registros.push(item.registro);
+          grupos.set(chave, grupo);
+        });
+
+        for (const grupo of grupos.values()) {
+          await salvarNotas(grupo.registros, grupo.disciplinaId, grupo.bimestreId);
+        }
+
+        setUltimoSalvamento(new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+        return true;
+      } catch (error) {
+        itensPendentes.forEach((item) => {
+          pendentesRef.current.set(item.chave, item);
+        });
+        setPendentesCount(pendentesRef.current.size);
+        setErroSalvamento(true);
+        mostrarFeedback("Não foi possível salvar as notas automaticamente.", "erro");
+        return false;
+      } finally {
+        salvandoRef.current = false;
+        setSalvandoAutomatico(false);
+      }
+    })();
+
+    salvamentoAtualRef.current = salvamento;
+    return salvamento;
+  }, [mostrarFeedback, salvarNotas]);
+
+  const agendarSalvamentoAutomatico = useCallback(() => {
+    if (timerSalvamentoRef.current) {
+      window.clearTimeout(timerSalvamentoRef.current);
+    }
+
+    timerSalvamentoRef.current = window.setTimeout(() => {
+      salvarFilaPendente();
+    }, 700);
+  }, [salvarFilaPendente]);
+
+  useEffect(
+    () => () => {
+      if (timerSalvamentoRef.current) {
+        window.clearTimeout(timerSalvamentoRef.current);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!temAlteracoesPendentes) return undefined;
 
     const avisarAntesDeSair = (event) => {
       event.preventDefault();
@@ -152,12 +353,12 @@ export default function Notas() {
     return () => {
       window.removeEventListener("beforeunload", avisarAntesDeSair);
     };
-  }, [temAlteracoesNaoSalvas]);
+  }, [temAlteracoesPendentes]);
 
   useEffect(() => {
-    if (!temAlteracoesNaoSalvas) return undefined;
+    if (!temAlteracoesPendentes) return undefined;
 
-    let confirmandoSaida = false;
+    let navegandoAposSalvar = false;
 
     const interceptarLinksInternos = async (event) => {
       if (
@@ -184,23 +385,13 @@ export default function Notas() {
       event.preventDefault();
       event.stopPropagation();
 
-      if (confirmandoSaida) return;
-      confirmandoSaida = true;
+      if (navegandoAposSalvar) return;
+      navegandoAposSalvar = true;
 
-      const confirmado = await pedirConfirmacao({
-        titulo: "Sair sem salvar notas?",
-        mensagem:
-          "Você alterou notas de " +
-          totalAlteracoesNaoSalvas +
-          " aluno(s), mas ainda não clicou em Salvar alterações. Se sair agora, essas mudanças serão perdidas.",
-        textoConfirmar: "Sair sem salvar",
-        textoCancelar: "Continuar editando",
-        perigo: true,
-      });
+      const salvou = await salvarFilaPendente();
+      navegandoAposSalvar = false;
 
-      confirmandoSaida = false;
-
-      if (confirmado) {
+      if (salvou) {
         navigate(rotaDestino);
       }
     };
@@ -210,41 +401,113 @@ export default function Notas() {
     return () => {
       document.removeEventListener("click", interceptarLinksInternos, true);
     };
-  }, [navigate, pedirConfirmacao, temAlteracoesNaoSalvas, totalAlteracoesNaoSalvas]);
+  }, [navigate, salvarFilaPendente, temAlteracoesPendentes]);
 
-  // Salva no Firestore apenas as notas que estão visíveis na tabela filtrada.
-  const salvarAlteracoes = async () => {
-    try {
-      setSalvandoNotas(true);
-      await salvarNotas(registros, disciplinaId, bimestreId);
-      setNotas(Object.fromEntries(registrosCalculados.map((registro) => [registro.aluno.id, montarNotaEditavel(registro)])));
-      mostrarFeedback("Notas salvas no banco de dados.");
-    } catch (error) {
-      mostrarFeedback("Não foi possível salvar as notas.", "erro");
-    } finally {
-      setSalvandoNotas(false);
-    }
-  };
-
-  const alterarNota = (alunoId, campo, valor) => {
-    setNotas((notasAtuais) => ({
-      ...notasAtuais,
-      [alunoId]: {
-        ...notasAtuais[alunoId],
+  const alterarNota = (registro, campo, valor) => {
+    const alunoId = registro.aluno.id;
+    const notaAtual = notas[alunoId] || montarNotaEditavel(registro);
+    const notaAtualizada = limparReavaliacaoQuandoNaoPrecisa(
+      {
+        ...notaAtual,
         [campo]: normalizarEntradaNota(valor),
       },
+      limiarReavaliacao,
+    );
+    const registroAtualizado = calcularRegistroEditado(registro, notaAtualizada, limiaresNotas);
+    const chave = disciplinaId + "|" + bimestreId + "|" + alunoId;
+
+    setNotas((notasAtuais) => ({
+      ...notasAtuais,
+      [alunoId]: notaAtualizada,
     }));
+
+    pendentesRef.current.set(chave, {
+      chave,
+      disciplinaId,
+      bimestreId,
+      registro: registroAtualizado,
+    });
+    setPendentesCount(pendentesRef.current.size);
+    setErroSalvamento(false);
+    agendarSalvamentoAutomatico();
   };
 
-  const limparZeroAoFocar = (alunoId, campo) => {
-    const valorAtual = notas[alunoId]?.[campo];
+  const limparZeroAoFocar = (registro, campo) => {
+    const valorAtual = notas[registro.aluno.id]?.[campo];
 
     if (Number(valorAtual || 0) === 0) {
-      alterarNota(alunoId, campo, "");
+      alterarNota(registro, campo, "");
     }
   };
 
   const valorInput = (alunoId, campo) => notas[alunoId]?.[campo] ?? "";
+
+  const textoSalvamento = useMemo(() => {
+    if (erroSalvamento) return "Erro ao salvar automaticamente";
+    if (salvandoAutomatico) return "Salvando automaticamente...";
+    if (pendentesCount > 0) return "Aguardando pausa na digitação...";
+    if (ultimoSalvamento) return "Salvo automaticamente às " + ultimoSalvamento;
+    return "Salvamento automático ativo";
+  }, [erroSalvamento, pendentesCount, salvandoAutomatico, ultimoSalvamento]);
+
+  const classeSalvamento = erroSalvamento
+    ? "autosave-status error"
+    : salvandoAutomatico || pendentesCount > 0
+      ? "autosave-status saving"
+      : "autosave-status saved";
+
+  function renderCampoEtapa(registro, indiceLinha, campoEtapa, campoReavaliacao, dataTourEtapa, dataTourReavaliacao, rotuloEtapa) {
+    const precisaReavaliacao = registro[campoEtapa] > 0 && registro[campoEtapa] < limiarReavaliacao;
+
+    return (
+      <div className={precisaReavaliacao ? "score-pair needs-reassessment" : "score-pair"}>
+        <label className="score-field">
+          <span className="score-label">
+            <strong>Avaliação</strong>
+            <em>{rotuloEtapa}</em>
+          </span>
+          <input
+            className="score-input"
+            data-tour={dataTourEtapa}
+            data-note-input="true"
+            data-note-row={indiceLinha}
+            data-note-field={campoEtapa}
+            type="number"
+            min="0"
+            max="50"
+            value={valorInput(registro.aluno.id, campoEtapa)}
+            onFocus={() => limparZeroAoFocar(registro, campoEtapa)}
+            onChange={(event) => alterarNota(registro, campoEtapa, event.target.value)}
+            onKeyDown={navegarEntreInputsDeNota}
+          />
+        </label>
+
+        {precisaReavaliacao && (
+          <label className="score-field reassessment-field">
+            <span className="score-label">
+              <strong>Reavaliação</strong>
+              <em>{rotuloEtapa}</em>
+            </span>
+            <input
+              className="score-input"
+              data-tour={dataTourReavaliacao}
+              data-note-input="true"
+              data-note-row={indiceLinha}
+              data-note-field={campoReavaliacao}
+              type="number"
+              min="0"
+              max="50"
+              value={valorInput(registro.aluno.id, campoReavaliacao)}
+              onFocus={() => limparZeroAoFocar(registro, campoReavaliacao)}
+              onChange={(event) => alterarNota(registro, campoReavaliacao, event.target.value)}
+              onKeyDown={navegarEntreInputsDeNota}
+            />
+            <small className="reassessment-hint">Abaixo de {limiarReavaliacao}</small>
+          </label>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="page">
@@ -252,7 +515,7 @@ export default function Notas() {
         <div>
           <span className="eyebrow">Lançamento</span>
           <h1>Notas</h1>
-          <p>Média das duas etapas finais, usando a maior nota entre avaliação e reavaliação.</p>
+          <p>Total das duas etapas finais, usando reavaliação apenas quando a avaliação ficar abaixo de {limiarReavaliacao}.</p>
         </div>
       </header>
 
@@ -323,15 +586,15 @@ export default function Notas() {
 
       <section className="metrics-grid">
         <article className="metric-card">
-          <span>Média atual</span>
-          <strong>{formatarNota(resumo.media)}</strong>
+          <span>Total médio</span>
+          <strong>{formatarNota(resumo.totalMedio)}</strong>
           <p>Base filtrada</p>
         </article>
 
         <article className="metric-card warning">
           <span>Reavaliação</span>
           <strong>{resumo.reavaliacao}</strong>
-          <p>Avaliação abaixo de {LIMIAR_REAVALIACAO}</p>
+          <p>Avaliação abaixo de {limiarReavaliacao}</p>
         </article>
 
         <article className="metric-card">
@@ -348,93 +611,61 @@ export default function Notas() {
             <h2>{carregandoAlunos ? "Carregando..." : registros.length + " alunos"}</h2>
           </div>
 
-          <button
-            type="button"
-            className="button primary"
-            data-tour="notas-salvar"
-            onClick={salvarAlteracoes}
-            disabled={salvandoNotas || carregandoAlunos}
-          >
-            {salvandoNotas ? "Salvando..." : "Salvar alterações"}
-          </button>
+          <div className={classeSalvamento} data-tour="notas-salvar">
+            {textoSalvamento}
+          </div>
         </div>
 
-        <div className="table-wrap notes-table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Aluno</th>
-                <th>Ano</th>
-                <th>1ª Etapa (Avaliação)</th>
-                <th>1ª Etapa (Reavaliação)</th>
-                <th>2ª Etapa (Avaliação)</th>
-                <th>2ª Etapa (Reavaliação)</th>
-                <th>Média</th>
-              </tr>
-            </thead>
-
+        <div className="table-wrap notes-table-wrap" data-tour="notas-listagem">
+          <table className="notes-table">
+            <colgroup>
+              <col className="notes-student-col" />
+              <col className="notes-year-col" />
+              <col className="notes-stage-col" />
+              <col className="notes-stage-col" />
+              <col className="notes-total-col" />
+            </colgroup>
             <tbody>
-              {registros.map((registro) => (
+              {registros.map((registro, indiceLinha) => (
                 <tr key={registro.id} className={registro.precisaReavaliacao ? "needs-reassessment-row" : ""}>
-                  <td>
+                  <td
+                    className="student-cell"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => focarPrimeiroInputDaLinha(indiceLinha)}
+                    onKeyDown={(event) => ativarLinhaPeloTeclado(event, indiceLinha)}
+                  >
                     <strong>{registro.aluno.nome}</strong>
                     <small>Turma {registro.aluno.turma}</small>
                   </td>
-                  <td>{registro.aluno.ano}</td>
-                  <td>
-                    <input
-                      className="score-input"
-                      data-tour="nota-etapa1"
-                      type="number"
-                      min="0"
-                      max="50"
-                      value={valorInput(registro.aluno.id, "etapa1")}
-                      onFocus={() => limparZeroAoFocar(registro.aluno.id, "etapa1")}
-                      onChange={(event) => alterarNota(registro.aluno.id, "etapa1", event.target.value)}
-                    />
+                  <td className="year-cell">{registro.aluno.ano}</td>
+                  <td className="stage-cell">
+                    {renderCampoEtapa(
+                      registro,
+                      indiceLinha,
+                      "etapa1",
+                      campoReavaliacaoPorEtapa.etapa1,
+                      "nota-etapa1",
+                      "nota-etapa1-reavaliacao",
+                      "1ª Etapa",
+                    )}
                   </td>
-                  <td>
-                    <input
-                      className="score-input"
-                      data-tour="nota-etapa1-reavaliacao"
-                      type="number"
-                      min="0"
-                      max="50"
-                      value={valorInput(registro.aluno.id, "etapa1Reavaliacao")}
-                      onFocus={() => limparZeroAoFocar(registro.aluno.id, "etapa1Reavaliacao")}
-                      onChange={(event) => alterarNota(registro.aluno.id, "etapa1Reavaliacao", event.target.value)}
-                    />
-                    {registro.precisaReavaliacaoEtapa1 && <small className="reassessment-hint">Reavaliar</small>}
+                  <td className="stage-cell">
+                    {renderCampoEtapa(
+                      registro,
+                      indiceLinha,
+                      "etapa2",
+                      campoReavaliacaoPorEtapa.etapa2,
+                      "nota-etapa2",
+                      "nota-etapa2-reavaliacao",
+                      "2ª Etapa",
+                    )}
                   </td>
-                  <td>
-                    <input
-                      className="score-input"
-                      data-tour="nota-etapa2"
-                      type="number"
-                      min="0"
-                      max="50"
-                      value={valorInput(registro.aluno.id, "etapa2")}
-                      onFocus={() => limparZeroAoFocar(registro.aluno.id, "etapa2")}
-                      onChange={(event) => alterarNota(registro.aluno.id, "etapa2", event.target.value)}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="score-input"
-                      data-tour="nota-etapa2-reavaliacao"
-                      type="number"
-                      min="0"
-                      max="50"
-                      value={valorInput(registro.aluno.id, "etapa2Reavaliacao")}
-                      onFocus={() => limparZeroAoFocar(registro.aluno.id, "etapa2Reavaliacao")}
-                      onChange={(event) => alterarNota(registro.aluno.id, "etapa2Reavaliacao", event.target.value)}
-                    />
-                    {registro.precisaReavaliacaoEtapa2 && <small className="reassessment-hint">Reavaliar</small>}
-                  </td>
-                  <td>
-                    <strong>{formatarNota(registro.media)}</strong>
+                  <td className="total-cell" data-tour="nota-total">
+                    <span>Total</span>
+                    <strong>{formatarNota(registro.total)}</strong>
                     <small>
-                      Base: {registro.etapa1Final} e {registro.etapa2Final}
+                      {registro.etapa1Final} + {registro.etapa2Final}
                     </small>
                   </td>
                 </tr>
